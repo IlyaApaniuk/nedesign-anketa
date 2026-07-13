@@ -298,18 +298,19 @@ function renderChecks(block) {
 function renderGallery(block) {
   const selected = ans(block.k, []);
   const el = div('gallery');
-  for (const src of block.imgs) {
+  block.imgs.forEach((src, i) => {
     const item = div('gitem' + (selected.includes(src) ? ' on' : ''));
     const im = document.createElement('img');
     im.src = imgSrc(src); im.alt = ''; im.loading = 'lazy';
     item.appendChild(im);
+    item.appendChild(div('gnum', String(i + 1)));
     item.addEventListener('click', () => {
       toggle(selected, src);
       item.classList.toggle('on');
       save();
     });
     el.appendChild(item);
-  }
+  });
   return el;
 }
 
@@ -413,7 +414,11 @@ function collectSummary() {
         const sel = state.answers[block.k] || [];
         if (sel.length) sec.rows.push({ q: block.label || 'Выбрано', a: sel.join('; ') });
       } else if (block.type === 'gallery') {
-        sec.imgs = state.answers[block.k] || [];
+        const sel = state.answers[block.k] || [];
+        // номер = позиция фото в галерее; совпадает с бейджем на карточке
+        sec.imgs = block.imgs
+          .map((src, i) => ({ src, n: i + 1 }))
+          .filter((it) => sel.includes(it.src));
       } else if (block.type === 'colors') {
         sec.colors = state.answers[block.k] || [];
       }
@@ -487,20 +492,25 @@ async function makePdf() {
     }
 
     if (sec.imgs && sec.imgs.length) {
-      const iw = (CW - 2 * 4) / 3, ih = iw * 1.2;
+      const iw = (CW - 2 * 4) / 3, ih = iw * 1.2, cap = 6;
       let x = M;
       for (let i = 0; i < sec.imgs.length; i++) {
         if (i % 3 === 0) {
-          if (i > 0) y += ih + 4;
-          ensure(ih + 4);
+          if (i > 0) y += ih + cap + 3;
+          ensure(ih + cap + 3);
           x = M;
         }
+        const it = sec.imgs[i];
         try {
-          doc.addImage(await imgDataUri(sec.imgs[i]), 'JPEG', x, y, iw, ih);
+          doc.addImage(await imgDataUri(it.src), 'JPEG', x, y, iw, ih);
         } catch (e) { /* пропускаем битую картинку */ }
+        doc.setFont('Montserrat', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(120);
+        doc.text('№ ' + it.n, x, y + ih + 4);
         x += iw + 4;
       }
-      y += ih + 6;
+      y += ih + cap + 6;
     }
 
     if (sec.colors && sec.colors.length) {
@@ -525,7 +535,7 @@ function summaryText() {
   for (const sec of collectSummary()) {
     lines.push('== ' + sec.title.toUpperCase() + ' ==');
     for (const r of sec.rows || []) lines.push(r.q + ': ' + r.a);
-    if (sec.imgs && sec.imgs.length) lines.push('Выбранные референсы: ' + sec.imgs.map((s) => s.split('/').pop()).join(', '));
+    if (sec.imgs && sec.imgs.length) lines.push('Выбранные фото: № ' + sec.imgs.map((it) => it.n).join(', ') + ' (номера — на карточках в анкете и в PDF)');
     if (sec.colors && sec.colors.length) lines.push('Цвета: ' + sec.colors.join(', '));
     lines.push('');
   }
